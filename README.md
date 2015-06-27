@@ -1,4 +1,4 @@
-# A tmux based frontend for ii
+# A tmux based frontend for [ii](http://tools.suckless.org/ii/)
 
 multitail probably would have been a better choice...
 
