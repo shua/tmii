@@ -15,5 +15,16 @@ configuration is some vars at the top of tmii
     TSES="irc"      # tmux session name, change to something unique if you already use irc
     SNONE="(none)"  # option text for no channel in channel selection (attach to server)
 
-custom keybinds added for comfort in tmux_tmii.conf
+custom keybinds added for comfort in tmux\_tmii.conf
+
+# Tips
+
+Networks aliases with soft links
+
+    mv ~/irc/chat.freenode.net ~/irc/fn
+    ln -s ~/irc/fn ~/irc/chat.freenode.net
+    rm -rf ~/irc/irc.freenode.net
+    ln -s ~/irc/fn ~/irc/irc.freenode.net
+    tmii a fn/-
+
 
