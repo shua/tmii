@@ -27,4 +27,11 @@ Networks aliases with soft links
     ln -s ~/irc/fn ~/irc/irc.freenode.net
     tmii a fn/-
 
+# Ideas
+
+Color setting for highlight, right now uses default grep color
+
+Always keep in pane 2 lines high (how?)
+
+Some indicator for dead ii
 
