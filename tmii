@@ -12,8 +12,11 @@ SNONE="(none)"  # option text for no channel in channel selection (attach to ser
 
 tmii_tmux() {
     [ ! -z "$TMUX" ] && return
-    tmux has -t $TSES \
-    ||  tmux new-session -c "$IRCPATH" -s $TSES -n ctl -d\; \
+    # the line below shoud work, but tmux leaves sockets behind, so I'm using a ps hack instead
+    # [ -e "/tmp/tmux-$UID/tmii" ] \
+    [ ! -z "$(ps aux | grep tmux | grep "\-L tmii")" ] \
+    &&  tmux -L tmii has -t $TSES \
+    ||  tmux -L tmii new-session -c "$IRCPATH" -s $TSES -n ctl -d\; \
              source-file "$TCONF"
 }
 
@@ -82,12 +85,12 @@ tmii_a() {
     fi
 
     tmii_tmux
-    tmux new-window -n $conn -c $IRCPATH/$conn \
+    tmux -L tmii new-window -n $conn -c $IRCPATH/$conn \
             "(cat out; tail -n 0 -f out) |grep --color '$(tmii_higrep)'"\; \
         split-window -v -l 1 -c $IRCPATH/$conn \
             "while read -p \"$conn> \" line; do echo \$line >> in; done"\; \
         select-pane -t 0 -d
-    [ -z "$TMUX" ] && tmux attach -t irc
+    [ -z "$TMUX" ] && tmux -L tmii attach -t irc
     return 0
 }
 
@@ -100,7 +103,7 @@ tmii_d() {
     win="$@"
     if [ -z "$win" ]; then
         PS3="win> "
-        select win in $(tmux list-windows -F "#W" | grep -v "ctl"); do
+        select win in $(tmux -L tmii list-windows -F "#W" | grep -v "ctl"); do
             break;
         done
     fi
@@ -109,7 +112,7 @@ tmii_d() {
         return 0
     fi
 
-    tmux kill-window -t $win && return 0
+    tmux -L tmii kill-window -t $win && return 0
 }
 
 tmii_j() {
@@ -202,8 +205,8 @@ tmii_p() {
     # echo "opt: \"$opt\""
 
     serv=""
-    if [ "$(tmux display-message -p "#S")" == "$TSES" ]; then
-        tmp="$(tmux display-message -p "#W")"
+    if [ "$(tmux -L tmii display-message -p "#S")" == "$TSES" ]; then
+        tmp="$(tmux -L tmii display-message -p "#W")"
         # echo "tmp: \"$tmp\""
         if [ "$tmp" != "ctl" ]; then
             [ "$opt" == "l" ] \
@@ -214,11 +217,17 @@ tmii_p() {
 
     sopt="$([ -z "$serv" ] || echo "-I $serv/")"
     if [ "$opt" == "9" ]; then
-        tmux new-window "tmii 9"
+        tmux -L tmii new-window "tmii 9"
     else
-        tmux command-prompt $sopt -p "${opt}:" "new-window \"tmii $opt %%\""
+        tmux -L tmii command-prompt $sopt -p "${opt}:" "new-window \"tmii $opt %%\""
     fi
 }
+
+if [ -z "$1" ]; then
+    tmii_tmux
+    tmux -L tmii attach
+    exit
+fi
 
 case $1 in
 a) shift; tmii_a $(IFS='/'; echo $1)
