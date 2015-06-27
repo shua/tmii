@@ -1,0 +1,247 @@
+#!/bin/bash
+# just to be safe, I don't know if this will work in any other shell
+
+TSES="irc"
+TCONF=~/.config/tmux_tmii.conf
+IRCPATH=~/irc
+SNONE="(none)"
+HINICKS="shuall_ shuall"
+HILIGHT=""
+
+tmii_tmux() {
+    [ ! -z "$TMUX" ] && return
+    tmux has -t $TSES \
+    ||  tmux new-session -c "$IRCPATH" -s $TSES -n ctl -d\; \
+             source-file "$TCONF"
+}
+
+tmii_selserv() {
+    PS3="serv> "
+    select serv in $(
+        (cd $IRCPATH; for i in *; do
+            [ -p $i/in ] && [ -f $i/out ] && (
+                [ -L $i ] \
+                && echo "1 $i" \
+                || echo "0 $i"
+            );
+        done) \
+        |sort |cut -f2 -d' '
+    )
+    do
+        echo $serv
+        break
+    done
+}
+
+tmii_selchan() {
+    [ -z "$1" ] || [ ! -d "$IRCPATH/$1" ] \
+    &&  serv=$(tmii_selserv) \
+    ||  serv=$1
+
+    PS3="chan> "
+    select chan in $(
+        (cd $IRCPATH/$serv; for i in *; do
+            [ -p $i/in ] && [ -f $i/out ] && (
+                [ "${i::1}" == "#" ] \
+                &&  echo "0 $i" \
+                ||  echo "1 $i"
+            )
+        done) |sort |cut -f2 -d' '; echo $SNONE)
+    do
+        echo $serv
+        [ "$chan" == "$SNONE" ] || echo $chan
+        break
+    done
+}
+
+tmii_higrep() {
+    for n in $HINICKS; do
+        echo -n $n' *:\|'
+    done
+    for l in $HILIGHTS; do
+        echo -n $l'\|'
+    done
+}
+
+tmii_a() {
+    # echo "a input:'$@'"
+    if [ $# -eq 2 ]; then
+        serv=$1
+        [ "$2" == "-" ] && chan="" || chan=$2
+    else
+        servchan=($(tmii_selchan $1))
+        serv=${servchan[0]}
+        chan=${servchan[1]}
+    fi
+    [ -z $chan ] && conn="$serv" || conn="$serv/$chan"
+    if [ ! -p $IRCPATH/$conn/in ] || [ ! -f $IRCPATH/$conn/out ]; then
+        echo "$conn not a valid channel"
+        return 1
+    fi
+
+    tmii_tmux
+    tmux new-window -n $conn -c $IRCPATH/$conn \
+            "(cat out; tail -n 0 -f out) |grep --color '$(tmii_higrep)'"\; \
+        split-window -v -l 1 -c $IRCPATH/$conn \
+            "while read -p \"$conn> \" line; do echo \$line >> in; done"\; \
+        select-pane -t 0 -d
+    [ -z "$TMUX" ] && tmux attach -t irc
+    return 0
+}
+
+tmii_d() {
+    # echo "d input:'$@'"
+    if [ -z "$TMUX" ]; then
+        echo "not in a tmux, so nothing to detach"
+        return 1 
+    fi
+    win="$@"
+    if [ -z "$win" ]; then
+        PS3="win> "
+        select win in $(tmux list-windows -F "#W" | grep -v "ctl"); do
+            break;
+        done
+    fi
+    if [ "$@" == "ctl" ]; then
+        echo "can't detach ctl window, sorry"
+        return 0
+    fi
+
+    tmux kill-window -t $win && return 0
+}
+
+tmii_j() {
+    # echo "j input:'$@'"
+    serv=$1
+    if [ -z "$serv" ]; then
+        serv=$(tmii_selserv)
+    elif [ ! -d "$IRCPATH/$serv" ]; then # TODO: check ps ii instead of folder
+        echo "$serv not a known server, try connecting (tmii c $1) first"
+        return 1
+    elif [ -z "$2" ]; then
+        read -p "chan> " chan;
+    else
+        chan=$2
+    fi
+    
+    echo "joining $serv/$chan"
+    echo "/j $chan" > $IRCPATH/$serv/in
+    tmii_a $serv $chan || echo "Couldn't join $serv/$chan"
+}
+
+tmii_l() {
+    if [ -z "$1" ] || [ -z "$2" ] || [ ! -d $IRCPATH/$1/$2 ]; then
+        echo "Usage tmii l SERV CHAN"
+        return 1
+    fi
+    
+    echo "/l $2" > $IRCPATH/$1 && return 0
+}
+
+tmii_c() {
+    # echo "c input: $@"
+    serv=$1
+    nick=$2
+    [ -z "$serv" ] || opt="-s $serv"
+    [ -z "$nick" ] || opt="$opt -n $nick"
+    [ -d "$IRCPATH/log" ] || mkdir "$IRCPATH/log"
+    nohup ii $opt > $IRCPATH/log/$serv.log 2> $IRCPATH/log/$serv.log &
+    echo "Connecting to $serv..."
+    sleep 1
+    [ -s $IRCPATH/log/$serv.log ] \
+    &&  (echo "Error returned:"; cat $IRCPATH/log/$serv.log; read tmp)
+    return 0
+}
+
+tmii_9() {
+    pidlist=($(
+        ps ax o comm=COMM o cmd=CMD o pid=PID \
+        |grep ^ii \
+        |tr -s ' ' \
+        |while read -r line; do
+            tmp="${line##*-s }"
+            serv="${tmp%% *}"
+            pid="${line##* }"
+            [ -z "$1" ] \
+            ||  [[ "$serv" == *"$1"* ]] \
+            &&  echo "$serv $pid"
+        done ))
+
+    if [ ${#pidlist[@]} -eq 0 ]; then
+        echo "No server found"
+        return 1
+    fi
+
+    PS3="serv> "
+    select serv in $(
+        for (( i = 0; i < ${#pidlist[@]} ; i+=2 )); do
+            echo "${pidlist[$i]}"; 
+        done); do
+        break
+    done
+    
+    kill ${pidlist[$(( $REPLY * 2 - 1 ))]} && return 0
+}
+
+tmii_p() {
+    if [ -z "$TMUX" ]; then
+        echo "Usage: tmii p adjlc9 # for use in tmux"
+        return 0
+    fi
+    case "$1" in
+    a|d|j|l|c|9)
+        opt="$1"
+        ;;
+    *)
+        echo "Usage: tmii p adjlc9 # for use in tmux"
+        return 1
+        ;;
+    esac
+    # echo "opt: \"$opt\""
+
+    serv=""
+    if [ "$(tmux display-message -p "#S")" == "$TSES" ]; then
+        tmp="$(tmux display-message -p "#W")"
+        # echo "tmp: \"$tmp\""
+        if [ "$tmp" != "ctl" ]; then
+            [ "$opt" == "l" ] \
+            &&  serv="$tmp" \
+            ||  serv="${tmp%%/*}"
+        fi
+    fi
+
+    sopt="$([ -z "$serv" ] || echo "-I $serv/")"
+    if [ "$opt" == "9" ]; then
+        tmux new-window "tmii 9"
+    else
+        tmux command-prompt $sopt -p "${opt}:" "new-window \"tmii $opt %%\""
+    fi
+}
+
+case $1 in
+a) shift; tmii_a $(IFS='/'; echo $1)
+;;
+d) shift; tmii_d $@
+;;
+j) shift; tmii_j $(IFS='/'; echo $1)
+;;
+l) shift; tmii_l $(IFS='/'; echo $1)
+;;
+c) shift; tmii_c $@
+;;
+9) shift; tmii_9 $@
+;;
+p) shift; tmii_p $@
+;;
+*)
+    echo "Usage: tmii CMD [OPTS]"
+    echo "  a [ SERV [ /CHAN | - ] ] # - indicates no channel"
+    echo "  d [ SERV [ /CHAN ] ]"
+    echo "  j [ SERV [ /CHAN ] ]"
+    echo "  l [ SERV [ /CHAN ] ]"
+    echo "  c [ SERV ] [ NICK ]"
+    echo "  9 [ SERV ]              # can be substring"
+    echo "  p adjlc9                # tmux prompt"
+;;
+esac
+
