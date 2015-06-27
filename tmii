@@ -1,12 +1,14 @@
 #!/bin/bash
 # just to be safe, I don't know if this will work in any other shell
 
-TSES="irc"
-TCONF=~/.config/tmux_tmii.conf
-IRCPATH=~/irc
-SNONE="(none)"
-HINICKS="shuall_ shuall"
-HILIGHT=""
+TCONF=~/.config/tmux_tmii.conf  # path to tmux_tmii.conf for custom key-binds
+IRCPATH=~/irc               # path to ii working directory, why change default?
+HINICKS="shuall_ shuall"    # "nick" will highlight "nick:" "nick     :" "nick :" etc
+HILIGHT=""                  # "word" will highlight all occurances of "word"
+
+# internal vars
+TSES="irc"      # tmux session name, change to something unique if you already use irc
+SNONE="(none)"  # option text for no channel in channel selection (attach to server)
 
 tmii_tmux() {
     [ ! -z "$TMUX" ] && return
@@ -145,7 +147,7 @@ tmii_c() {
     [ -z "$serv" ] || opt="-s $serv"
     [ -z "$nick" ] || opt="$opt -n $nick"
     [ -d "$IRCPATH/log" ] || mkdir "$IRCPATH/log"
-    nohup ii $opt > $IRCPATH/log/$serv.log 2> $IRCPATH/log/$serv.log &
+    nohup ii -p $IRCPATH $opt > $IRCPATH/log/$serv.log 2> $IRCPATH/log/$serv.log &
     echo "Connecting to $serv..."
     sleep 1
     [ -s $IRCPATH/log/$serv.log ] \
