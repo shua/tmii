@@ -88,7 +88,7 @@ tmii_a() {
     tmux -L tmii new-window -n $conn -c $IRCPATH/$conn \
             "(cat out; tail -n 0 -f out) |grep --color '$(tmii_higrep)'"\; \
         split-window -v -l 1 -c $IRCPATH/$conn \
-            "while read -p \"$conn> \" line; do echo \$line >> in; done"\; \
+            "while echo -n \"$conn> \" >> /dev/stdout && read line; do echo \$line >> in; done"\; \
         select-pane -t 0 -d
     [ -z "$TMUX" ] && tmux -L tmii attach -t irc
     return 0
