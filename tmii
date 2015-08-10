@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # just to be safe, I don't know if this will work in any other shell
 
 TCONF=~/.config/tmux_tmii.conf  # path to tmux_tmii.conf for custom key-binds
@@ -9,6 +9,7 @@ HILIGHT=""                  # "word" will highlight all occurances of "word"
 # internal vars
 TSES="irc"      # tmux session name, change to something unique if you already use irc
 SNONE="(none)"  # option text for no channel in channel selection (attach to server)
+TMIISEL=""      # used for POSIX compliant select replacement
 
 tmii_tmux() {
     [ ! -z "$TMUX" ] && return
@@ -18,6 +19,24 @@ tmii_tmux() {
     &&  tmux -L tmii has -t $TSES \
     ||  tmux -L tmii new-session -c "$IRCPATH" -s $TSES -n ctl -d\; \
              source-file "$TCONF"
+}
+
+tmii_select() {
+    TMIISELOPT=""
+    while [ "$TMIISELOPT" = "" ] \
+          || [ $(expr "$TMIISELOPT" ":" "[0-9]*[^0-9]") -ne "0" ] \
+          || [ "$TMIISELOPT" -gt "$#" ]
+    do
+        TMIISELI=1
+        for TMIISELCOPT in "$@"; do
+            printf "$i> $TMIISELCOPT\n"
+            : $((TMIISELI+=1))
+        done
+        printf "$PS3"
+        read TMIISELOPT
+    done
+    shift $((TMIISELOPT-1))
+    TMIISEL="$1"
 }
 
 tmii_selserv() {
@@ -47,24 +66,24 @@ tmii_selchan() {
     select chan in $(
         (cd $IRCPATH/$serv; for i in *; do
             [ -p $i/in ] && [ -f $i/out ] && (
-                [ "${i::1}" == "#" ] \
+                [ "${i::1}" = "#" ] \
                 &&  echo "0 $i" \
                 ||  echo "1 $i"
             )
         done) |sort |cut -f2 -d' '; echo $SNONE)
     do
         echo $serv
-        [ "$chan" == "$SNONE" ] || echo $chan
+        [ "$chan" = "$SNONE" ] || echo $chan
         break
     done
 }
 
 tmii_higrep() {
     for n in $HINICKS; do
-        echo -n $n' *:\|'
+        printf "%s" $n' *:\|'
     done
     for l in $HILIGHTS; do
-        echo -n $l'\|'
+        printf "%s" $l'\|'
     done
 }
 
@@ -72,7 +91,7 @@ tmii_a() {
     # echo "a input:'$@'"
     if [ $# -eq 2 ]; then
         serv=$1
-        [ "$2" == "-" ] && chan="" || chan=$2
+        [ "$2" = "-" ] && chan="" || chan=$2
     else
         servchan=($(tmii_selchan $1))
         serv=${servchan[0]}
@@ -88,7 +107,7 @@ tmii_a() {
     tmux -L tmii new-window -n $conn -c $IRCPATH/$conn \
             "(cat out; tail -n 0 -f out) |grep --color '$(tmii_higrep)'"\; \
         split-window -v -l 1 -c $IRCPATH/$conn \
-            "while echo -n \"$conn> \" >> /dev/stdout && read line; do echo \$line >> in; done"\; \
+            "while printf \"%s\" \"$conn> \" && read line; do echo \$line >> in; done"\; \
         select-pane -t 0 -d
     [ -z "$TMUX" ] && tmux -L tmii attach -t irc
     return 0
@@ -107,7 +126,7 @@ tmii_d() {
             break;
         done
     fi
-    if [ "$@" == "ctl" ]; then
+    if [ "$@" = "ctl" ]; then
         echo "can't detach ctl window, sorry"
         return 0
     fi
@@ -124,7 +143,8 @@ tmii_j() {
         echo "$serv not a known server, try connecting (tmii c $1) first"
         return 1
     elif [ -z "$2" ]; then
-        read -p "chan> " chan;
+        printf "%s" "chan> "
+        read chan;
     else
         chan=$2
     fi
@@ -168,7 +188,7 @@ tmii_9() {
             serv="${tmp%% *}"
             pid="${line##* }"
             [ -z "$1" ] \
-            ||  [[ "$serv" == *"$1"* ]] \
+            ||  [[ "$serv" = *"$1"* ]] \
             &&  echo "$serv $pid"
         done ))
 
@@ -184,7 +204,7 @@ tmii_9() {
         done); do
         break
     done
-    
+
     kill ${pidlist[$(( $REPLY * 2 - 1 ))]} && return 0
 }
 
@@ -205,18 +225,18 @@ tmii_p() {
     # echo "opt: \"$opt\""
 
     serv=""
-    if [ "$(tmux -L tmii display-message -p "#S")" == "$TSES" ]; then
+    if [ "$(tmux -L tmii display-message -p "#S")" = "$TSES" ]; then
         tmp="$(tmux -L tmii display-message -p "#W")"
         # echo "tmp: \"$tmp\""
         if [ "$tmp" != "ctl" ]; then
-            [ "$opt" == "l" ] \
+            [ "$opt" = "l" ] \
             &&  serv="$tmp" \
             ||  serv="${tmp%%/*}"
         fi
     fi
 
     sopt="$([ -z "$serv" ] || echo "-I $serv/")"
-    if [ "$opt" == "9" ]; then
+    if [ "$opt" = "9" ]; then
         tmux -L tmii new-window "tmii 9"
     else
         tmux -L tmii command-prompt $sopt -p "${opt}:" "new-window \"tmii $opt %%\""
